@@ -135,8 +135,8 @@ def read_xvg(xvg_filenames, bin_size=0, one_traj=True, skip_time=True):
 
 def pbc_center(xtcs, tprs, ndx, rewrite=False):
     '''
-    This function is used for pre-processing trajectories that have pbc issues. It does the
-    following:
+    This function is used for pre-processing trajectories that have pbc issues.
+    It does the following:
         1. Make any split atoms whole using gmx trjconv -pbc whole
         2. Eliminate any jumps across the periodic box using gmx trjconv -pbc nojump
         3. Move the center of mass of the protein into the box using gmx trjconv -pbc mol
@@ -148,24 +148,33 @@ def pbc_center(xtcs, tprs, ndx, rewrite=False):
     :param rewrite: Whether to rewrite the ndx file or the intermediate xtc files.
     :return:
     '''
-    n_files = len(xtcs)
+
     make_ndx(tpr_filename=tprs[0], ndx_filename=ndx, rewrite=rewrite)
-    stripped_xtc = [xtc[0:-4] for xtc in xtcs]
+
+    orig_xtcs = []
+    n_files = 0
+    for xtc in xtcs:
+        if ("whole" not in xtc) and ("nojump" not in xtc) and ("mol" not in xtc) \
+                and ("cntr" not in xtc):
+            orig_xtcs.append(xtc)
+            n_files += 1
+
+    stripped_xtcs = [orig_xtc[0:-4] for orig_xtc in orig_xtcs]
 
     for i in range(n_files):
-        whole_name = stripped_xtc[i] + '_whole.xtc'
-        noj_name = stripped_xtc[i] + '_nojump.xtc'
-        mol_name = stripped_xtc[i] + '_mol.xtc'
-        cntr_name = stripped_xtc[i] + '_cntr.xtc'
+        whole_name = stripped_xtcs[i] + '_whole.xtc'
+        noj_name = stripped_xtcs[i] + '_nojump.xtc'
+        mol_name = stripped_xtcs[i] + '_mol.xtc'
+        cntr_name = stripped_xtcs[i] + '_cntr.xtc'
 
         if os.path.exists(whole_name) and not rewrite:
             print "The file", whole_name, "already exists: use rewrite=True to override"
         else:
             os.system('echo 3 3 | gmx trjconv -f %s -s %s -pbc whole -n %s -o %s' %
-                      (xtcs[i], tprs[i], ndx, whole_name))
+                      (orig_xtcs[i], tprs[i], ndx, whole_name))
 
         if os.path.exists(noj_name) and not rewrite:
-            print "The file", noj_name, "already exists: use rewrite=True to override"
+            print "The file", mol_name, "already exists: use rewrite=True to override"
         else:
             os.system('echo 3 3 | gmx trjconv -f %s -s %s -pbc nojump -n %s -o %s' %
                       (whole_name, tprs[i], ndx, noj_name))
@@ -207,6 +216,9 @@ def pre_process(xtcs, tprs, ndx, xvgs, bin_size=0, AA=True, one_traj=True, rewri
     :return: distance matrix.
     '''
 
+    cntr_xtcs = []
+    n_files = 0
+
     make_ndx(tprs[0], ndx, rewrite=rewrite, AA=AA)
     mol_ndx = read_ndx(ndx_filename=ndx)
     if AA:
@@ -214,14 +226,16 @@ def pre_process(xtcs, tprs, ndx, xvgs, bin_size=0, AA=True, one_traj=True, rewri
     else:
         size_mol1 = len(mol_ndx['mol_1_and_name_BB'])
 
-    n_files = len(xtcs)
-
     pbc_center(xtcs, tprs, ndx)
-    new_xtcs = [xtc[0:-4]+'_cntr.xtc' for xtc in xtcs]
+
+    for xtc in xtcs:
+        if 'cntr' in xtc:
+            cntr_xtcs.append(xtc)
+            n_files += 1
 
     for i in range(n_files):
 
-        make_xvg(tpr_filename=tprs[i], xtc_filename=new_xtcs[i], ndx_filename=ndx,
+        make_xvg(tpr_filename=tprs[i], xtc_filename=cntr_xtcs[i], ndx_filename=ndx,
                  xvg_filename=xvgs[i], length_mol1=size_mol1, rewrite=rewrite)
 
     return read_xvg(xvg_filenames=xvgs, one_traj=one_traj, bin_size=bin_size), mol_ndx
