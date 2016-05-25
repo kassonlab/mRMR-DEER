@@ -51,7 +51,7 @@ def restrict_distances(mat, dist_range=None, bin_size=0):
     :return: a list of permitted pair numbers.
     '''
     permitted_pairs = []
-    dists = np.mean(mat, axis=1)
+    dists = np.mean(mat, axis=0)
     if bin_size != 0:
         dists = np.multiply(dists, bin_size)
 
@@ -89,11 +89,13 @@ def mRMR(mat, iters, H=None, weights=[1, 0], restrict=None, bin_size=0):
         permitted_resis = [i for i in range(n_pairs)]  # If there are no restrictions, look at all resis
     else:
         permitted_resis = restrict_distances(mat, restrict, bin_size=bin_size)
+
     np.savetxt('permitted_pairs.txt', permitted_resis)
+
+    # If no entropy has been provided, entropy must be calculated for permitted residues.
     if H is None:
-        H = [entropy(mat[:, i]) for i in permitted_resis]  # Get the entropy of each permitted pair.
-    else:
-        H = H[permitted_resis]
+        H = [entropy(mat[:, i]) for i in range(n_pairs)]
+
     # Initialize a set omega. At each iteration you will pull a pair from this set
     # based on the mRMR criterion of your choice (subtraction or division). The pair
     # will be placed into the set s. s is the final set of highest mRMR pairs.
@@ -105,8 +107,8 @@ def mRMR(mat, iters, H=None, weights=[1, 0], restrict=None, bin_size=0):
     for m in range(iters):  # Number of times you want to perform mRMR
         print "m =", m, "calculation"
         if m == 0:  # At the first step, choose the highest entropy pair.
-
-            s.append(omega.pop(np.argmax(H)))
+            temp_H = [H[i] for i in permitted_resis]
+            s.append(omega.pop(np.argmax(temp_H)))
             # Now you have lost the nice property that omega[i] = i. You must be
             # careful in all following calculations to ensure you pop the right
             # element of omega.
