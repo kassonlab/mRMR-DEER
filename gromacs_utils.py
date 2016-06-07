@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import time
 
 
 def make_ndx(tpr_filename, ndx_filename, rewrite=False, AA=True):
@@ -34,6 +35,7 @@ def make_ndx(tpr_filename, ndx_filename, rewrite=False, AA=True):
 def read_ndx(ndx_filename):
     '''
     Reads a Gromacs ndx file into a dictionary. The dictionary keys are the group names.
+    If used with mRMR algorithm, group names should be the names discussed in make_ndx
     :param ndx_filename: path to ndx file
     :return: dictionary of the form index_dict[group id] = [atom ids in group id]
     '''
@@ -100,11 +102,16 @@ def read_xvg(xvg_filenames, bin_size=0, one_traj=True, skip_time=True):
     This was added for flexibility, but isn't useful for mRMR. Need to set True.
     :return: array of distances. dist[i,j] = pair j distance value at frame number i.
     '''
-    all_data = []
+
+    data = []
+
     for xvg_filename in xvg_filenames:
+        start_time = time.time()
         print "Reading file " + xvg_filename + '...'
-        data = []
         inputfile = open(xvg_filename, 'r')
+
+        if not one_traj:
+            traj_data = []
 
         while 1:
             newline = inputfile.readline()
@@ -126,11 +133,17 @@ def read_xvg(xvg_filenames, bin_size=0, one_traj=True, skip_time=True):
                         temp_vec.append(dist)
 
                     col_num += 1
-                data.append(temp_vec)
-        all_data.append(data)
-    if one_traj:
-        all_data = np.concatenate(all_data, axis=0)
-    return np.array(np.squeeze(all_data))
+                if not one_traj:
+                    traj_data.append(temp_vec)
+                else:
+                    data.append(temp_vec)
+
+        if not one_traj:
+            data.append(traj_data)
+        end_time = time.time()
+        print "Time elapsed:", end_time-start_time
+
+    return np.array(data)
 
 
 def pbc_center(xtcs, tprs, ndx, rewrite=False):
@@ -138,15 +151,18 @@ def pbc_center(xtcs, tprs, ndx, rewrite=False):
     This function is used for pre-processing trajectories that have pbc issues.
     It does the following:
         1. Make any split atoms whole using gmx trjconv -pbc whole
-        2. Eliminate any jumps across the periodic box using gmx trjconv -pbc nojump
-        3. Move the center of mass of the protein into the box using gmx trjconv -pbc mol
-        4. Center the proteins in the box using gmx trjconv -center
+        2. Center on a single protein. Ideally, we would center on both proteins.
+           However, there are problems with gmx trjconv -center on multiple
+           chains. See
+           https://mailman-1.sys.kth.se/pipermail/gromacs.org_gmx-users/2010-August/053340.html
+           To do: option to center on one or the other protein. Right now we just
+           center on the second protein, Opa.
     :param xtcs: A list of xtcs for pre-processing
     :param tprs: A list of tprs. Must be in the same order as the xtc list.
     :param ndx: A single ndx filename. The ndx file will be written using make_ndx if it
     does not already exist.
     :param rewrite: Whether to rewrite the ndx file or the intermediate xtc files.
-    :return:
+    :return: None. Writes appropriate gmx commands to console.
     '''
 
     make_ndx(tpr_filename=tprs[0], ndx_filename=ndx, rewrite=rewrite)
@@ -154,8 +170,7 @@ def pbc_center(xtcs, tprs, ndx, rewrite=False):
     orig_xtcs = []
     n_files = 0
     for xtc in xtcs:
-        if ("whole" not in xtc) and ("nojump" not in xtc) and ("mol" not in xtc) \
-                and ("cntr" not in xtc):
+        if ("whole" not in xtc) and ("cntr" not in xtc):
             orig_xtcs.append(xtc)
             n_files += 1
 
@@ -163,8 +178,6 @@ def pbc_center(xtcs, tprs, ndx, rewrite=False):
 
     for i in range(n_files):
         whole_name = stripped_xtcs[i] + '_whole.xtc'
-        noj_name = stripped_xtcs[i] + '_nojump.xtc'
-        mol_name = stripped_xtcs[i] + '_mol.xtc'
         cntr_name = stripped_xtcs[i] + '_cntr.xtc'
 
         if os.path.exists(whole_name) and not rewrite:
@@ -173,23 +186,34 @@ def pbc_center(xtcs, tprs, ndx, rewrite=False):
             os.system('echo 3 3 | gmx trjconv -f %s -s %s -pbc whole -n %s -o %s' %
                       (orig_xtcs[i], tprs[i], ndx, whole_name))
 
-        if os.path.exists(noj_name) and not rewrite:
-            print "The file", mol_name, "already exists: use rewrite=True to override"
-        else:
-            os.system('echo 3 3 | gmx trjconv -f %s -s %s -pbc nojump -n %s -o %s' %
-                      (whole_name, tprs[i], ndx, noj_name))
-
-        if os.path.exists(mol_name) and not rewrite:
-            print "The file", mol_name, "already exists: use rewrite=True to override"
-        else:
-            os.system('echo 3 3 | gmx trjconv -f %s -s %s -pbc mol -n %s -o %s' %
-                      (noj_name, tprs[i], ndx, mol_name))
-
         if os.path.exists(cntr_name) and not rewrite:
             print "The file", cntr_name, "already exists: use rewrite=True to override"
         else:
-            os.system('echo 3 3 | gmx trjconv -f %s -s %s -center -n %s -o %s' %
-                      (mol_name, tprs[i], ndx, cntr_name))
+            os.system('echo 1 3 | gmx trjconv -f %s -s %s -pbc mol -ur compact -center -n %s -o %s' %
+                      (whole_name, tprs[i], ndx, cntr_name))
+
+
+def write_pdbs(xtcs, tprs, ndx, pdbs, dt=100000, rewrite=False):
+    '''
+    Uses gmx trjconv to write out pdbs at intervals of dt. The pdbs are written with connect
+    records. This is really for visualization to make sure centered trajectories are not
+    moving throught the periodic box.
+    :param xtcs: A list of xtcs.
+    :param tprs: A list of tprs. MUST BE IN CORRECT ORDER
+    :param ndx: An index file of the form described in the method make_ndx
+    :param pdbs: A list of output pdbs. Must be the same length as your xtc list.
+    :param dt: Intervals at which you wish to write out pdbs. See GROMACS documentation of
+    trjconv.
+    :param rewrite: Whether to overwrite the pdbs.
+    :return: None. Writes appropriate gmx commands to console.
+    '''
+    n_files = len(xtcs)
+    for i in range(n_files):
+        if os.path.exists(pdbs[i]) and not rewrite:
+            print "The file", pdbs[i], "already exists: use rewrite=True to override"
+        else:
+            os.system('echo 3 | gmx trjconv -f %s -s %s -n %s -conect -dt %i -o %s' %
+                      (xtcs[i], tprs[i], ndx, dt, pdbs[i]))
 
 
 def pre_process(xtcs, tprs, ndx, xvgs, bin_size=0, AA=True, one_traj=True, rewrite=False):
