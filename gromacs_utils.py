@@ -3,6 +3,25 @@ import numpy as np
 import time
 
 
+def strip_filenames(filenames):
+    '''
+    This strips off "_cntr" and "_whole" substrings in each filename of a
+    list of filenames. The "_cntr" and "_whole" substrings are used to name
+    pbc -whole and pbc -cntr output xtcs, so it is good to be able to strip
+    off those extras.
+    :param filenames: A list of filenames from which "_cntr" and "_whole" will
+    be removed.
+    :return: A list of the edited filenames.
+    '''
+    stripped_filenames = []
+    for filename in filenames:
+        if '_cntr' in filename:
+            stripped_filenames.append(filename.replace('_cntr', '')[0:-4])
+        else:
+            stripped_filenames.append(filename[0:-4])
+    return stripped_filenames
+
+
 def make_ndx(tpr_filename, ndx_filename, rewrite=False, AA=True):
     '''
     Generates an index file using gmx select. The output index file will have the following groups:
@@ -89,36 +108,42 @@ def make_xvg(tpr_filename, xtc_filename, ndx_filename, xvg_filename, length_mol1
         print "The file " + xvg_filename + " already exists: use rewrite=True to override"
 
 
-def read_xvg(xvg_filenames, bin_size=0, one_traj=True, skip_time=True):
+def read_xvg(xvg_filenames, bin_size=0, contact=0, one_traj=True, skip_time=True):
     '''
     Reads a series of xvg files into a single distance matrix. You may keep each trajectory
     separate, or concatenate all the trajectories together for use with mRMR.
     :param xvg_filenames: a list of xvg filenames
     :param bin_size: if you wish to bin the distances for use with mRMR, provide a bin size in
     nm. If bin_size is 0, distances will be kept as floating point.
+    :param contact: if you want to get contact maps instead of distances, specify a contact
+    length in nm.
     :param one_traj: boolean to indicate whether trajectories are concatenated. Must be True
     for use with mRMR algorithm.
     :param skip_time: whether you want to read in the time step as well as the distances.
     This was added for flexibility, but isn't useful for mRMR. Need to set True.
-    :return: array of distances. dist[i,j] = pair j distance value at frame number i.
+    :return: array of distances. data[i,j] = pair j distance value at frame number i if you
+    are not keeping track of time or the trajectories. If you are keeping track of the
+    trajectory number, data[i,0] = traj_num. If you are keeping track of the time, data[i,1]=
+    time.
     '''
 
     data = []
+    traj_num = 0
 
     for xvg_filename in xvg_filenames:
         start_time = time.time()
         print "Reading file " + xvg_filename + '...'
         inputfile = open(xvg_filename, 'r')
 
-        if not one_traj:
-            traj_data = []
-
         while 1:
             newline = inputfile.readline()
             if not newline:
                 break
             if newline[0] not in ['@', '#']:
-                temp_vec = []
+                if one_traj:
+                    temp_vec = []
+                else:
+                    temp_vec = [traj_num]  # The first column of the data should be trajectory number
                 col_num = 0
                 for element in newline.split():
                     if skip_time:
@@ -127,23 +152,38 @@ def read_xvg(xvg_filenames, bin_size=0, one_traj=True, skip_time=True):
                                 dist = int(float(element)/bin_size)
                             else:
                                 dist = float(element)
-                            temp_vec.append(dist)
                     else:
                         dist = float(element)
-                        temp_vec.append(dist)
 
+                    if (contact > 0) and (col_num > 0):
+                        if dist < contact:
+                            dist = 1
+                        else:
+                            dist = 0
+
+                    temp_vec.append(dist)
                     col_num += 1
-                if not one_traj:
-                    traj_data.append(temp_vec)
-                else:
-                    data.append(temp_vec)
 
-        if not one_traj:
-            data.append(traj_data)
+                data.append(temp_vec)
         end_time = time.time()
-        print "Time elapsed:", end_time-start_time
-
+        print "Time elapsed to read trajectory", traj_num, ":", end_time-start_time
+        traj_num += 1
     return np.array(data)
+
+
+def dump_frame(xtc, tpr, ndx, time, pdb):
+    '''
+    Uses gmx trjconv -dump to pull the frame at "time" and dump it to a pdb.
+    This is useful for restarting all-atom simulations from coarse-grained
+    simulations. For use with the file cluster_dump.py.
+    :param xtc: A single xtc.
+    :param tpr: A single tpr.
+    :param ndx: An index file, not necessarily of the form in make_ndx
+    :param time: The time (in ps) you want to dump.
+    :param pdb: The name of the output pdb.
+    :return: None. os.system sends appropriate gmx command to console
+    '''
+    os.system('gmx trjconv -f %s -s %s -n %s -dump %f -o %s' % (xtc, tpr, ndx, time, pdb))
 
 
 def pbc_center(xtcs, tprs, ndx, rewrite=False):
