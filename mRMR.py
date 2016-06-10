@@ -1,5 +1,6 @@
 import math
 import numpy as np
+from gromacs_utils import make_ndx, read_ndx
 
 
 def entropy(X):
@@ -36,7 +37,7 @@ def joint_entropy(X, Y):
     return joint_H
 
 
-def restrict_distances(mat, dist_range=None, bin_size=0):
+def get_permitted_pairs(mat, dist_range=None, resi_select=None, resi_tpr=None, AA=True, bin_size=0):
     '''
     This function allows you to restrict the pairs you wish to consider in the mRMR
     algorithm based on their average distances. DEER measurements are reliable for
@@ -50,19 +51,54 @@ def restrict_distances(mat, dist_range=None, bin_size=0):
     absolute distance.
     :return: a list of permitted pair numbers.
     '''
-    permitted_pairs = []
-    dists = np.mean(mat, axis=0)
-    if bin_size != 0:
-        dists = np.multiply(dists, bin_size)
 
-    for i in range(len(dists)):
-        if dist_range[0] < dists[i] < dist_range[1]:
-            permitted_pairs.append(i)
+    _, num_pairs = mat.shape
+
+    permitted_pairs = [i for i in range(num_pairs)]
+
+    if dist_range is not None:
+        print "Choosing pairs with distances between", dist_range[0], "and", dist_range[1],"nm"
+        dists = np.mean(mat, axis=0)
+        if bin_size != 0:
+             dists = np.multiply(dists, bin_size)
+        for i in range(num_pairs):
+            if not (dist_range[0] < dists[i] < dist_range[1]):
+                permitted_pairs.remove(i)
+
+    if resi_select is not None:
+        full_selection = "(resname " + " or resname ".join(resi_select) + ")"
+        if AA:
+            selection = 'mol 1 and name CA and ' + full_selection + \
+                        '; mol 2 and name CA and ' + full_selection
+        else:
+            selection = 'mol 1 and name BB and ' + full_selection + \
+                        '; mol 2 and name BB and ' + full_selection
+
+        print "Eliminating pairs with selection:", resi_select
+
+        make_ndx(tpr_filename=resi_tpr, ndx_filename='selected_restrict_resis.ndx',
+                 selection=selection)
+        make_ndx(tpr_filename=resi_tpr, ndx_filename='all_resis.ndx', AA=AA)
+        restrict_dict = read_ndx('selected_restrict_resis.ndx')
+        all_dict = read_ndx('all_resis.ndx')
+        mol1all, mol2all, _, _ = all_dict.keys()
+        mol1restrict, mol2restrict = restrict_dict.keys()
+
+        pair_count = 0
+
+        for resi1 in all_dict[mol1all]:
+            for resi2 in all_dict[mol2all]:
+                if ((resi1 in restrict_dict[mol1restrict]) or
+                        (resi2 in restrict_dict[mol2restrict])) and \
+                                (pair_count in permitted_pairs):
+                    permitted_pairs.remove(pair_count)
+                pair_count += 1
 
     return permitted_pairs
 
 
-def mRMR(mat, iters, H=None, weights=[1, 0], restrict=None, bin_size=0):
+def mRMR(mat, iters, H=None, weights=[1, 0], dist_restrict=None, resi_restrict=None,
+         resi_tpr=None, AA=True, bin_size=0):
 
     '''
     This method is an implementation of the mRMR algorithm described in
@@ -75,8 +111,9 @@ def mRMR(mat, iters, H=None, weights=[1, 0], restrict=None, bin_size=0):
     :param H: you may provide an entropy matrix if you have already calculated one.
     :param weights: weights for MID and MIQ criteria. This should be a list:
     [MID_weight, MIQ_weight]
-    :param restrict: the range of allowed distances as a list. I.e., [2.0, 5.0] for
+    :param dist_restrict: the range of allowed distances as a list. I.e., [2.0, 5.0] for
     the usual DEER case.
+    :param resi_restrict:
     :param bin_size: This is a little clunky. The distance matrix mat must be pre-binned,
     but we need to know the bin size that was used. That way we can map bin number to
     absolute distance with restrict_distance()
@@ -85,10 +122,9 @@ def mRMR(mat, iters, H=None, weights=[1, 0], restrict=None, bin_size=0):
 
     _, n_pairs = mat.shape  # Get the number of pairs in your matrix
 
-    if restrict is None:
-        permitted_resis = [i for i in range(n_pairs)]  # If there are no restrictions, look at all resis
-    else:
-        permitted_resis = restrict_distances(mat, restrict, bin_size=bin_size)
+    permitted_resis = get_permitted_pairs(mat, dist_range=dist_restrict,
+                                          resi_select=resi_restrict, resi_tpr=resi_tpr,
+                                          AA=AA, bin_size=bin_size)
 
     np.savetxt('permitted_pairs.txt', permitted_resis)
 
