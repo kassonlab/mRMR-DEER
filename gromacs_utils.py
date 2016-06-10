@@ -22,7 +22,7 @@ def strip_filenames(filenames):
     return stripped_filenames
 
 
-def make_ndx(tpr_filename, ndx_filename, rewrite=False, AA=True):
+def make_ndx(tpr_filename, ndx_filename, selection=None, rewrite=False, AA=True):
     '''
     Generates an index file using gmx select. The output index file will have the following groups:
         mol_1_and_name_CA
@@ -40,12 +40,13 @@ def make_ndx(tpr_filename, ndx_filename, rewrite=False, AA=True):
     '''
 
     if rewrite or not os.path.exists(ndx_filename):
-        if AA:
-            selection = 'mol 1 and name CA; mol 2 and name CA; ' \
-                        '(mol 1 and name CA) or (mol 2 and name CA); mol 1 or mol 2'
-        else:
-            selection = 'mol 1 and name BB; mol 2 and name BB; ' \
-                        '(mol 1 and name BB) or (mol 2 and name BB); mol 1 or mol 2'
+        if selection is None:
+            if AA:
+                selection = 'mol 1 and name CA; mol 2 and name CA; ' \
+                            '(mol 1 and name CA) or (mol 2 and name CA); mol 1 or mol 2'
+            else:
+                selection = 'mol 1 and name BB; mol 2 and name BB; ' \
+                            '(mol 1 and name BB) or (mol 2 and name BB); mol 1 or mol 2'
         os.system('gmx select -s %s -select "%s" -on %s' % (tpr_filename, selection, ndx_filename))
     else:
         print "The file " + ndx_filename + " already exists: use rewrite=True to override"
@@ -152,16 +153,17 @@ def read_xvg(xvg_filenames, bin_size=0, contact=0, one_traj=True, skip_time=True
                                 dist = int(float(element)/bin_size)
                             else:
                                 dist = float(element)
+                            temp_vec.append(dist)
                     else:
                         dist = float(element)
+                        temp_vec.append(dist)
 
                     if (contact > 0) and (col_num > 0):
                         if dist < contact:
                             dist = 1
                         else:
                             dist = 0
-
-                    temp_vec.append(dist)
+                        temp_vec.append(dist)
                     col_num += 1
 
                 data.append(temp_vec)
