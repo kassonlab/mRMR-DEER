@@ -4,7 +4,7 @@ import numpy as np
 
 # This is a working test run of the mRMR algorithm using 540 microsecond CG trajectory
 
-pathname = '/home/jmh5sf/ngon/HPC_runs/cg/cg_540mus/'
+pathname = '/home/jmh5sf/dimer_ngon/ngon/HPC_runs/cg/cg_540mus/'
 
 xtcs = np.sort(glob.glob(pathname=pathname+'total_*.xtc'))
 tprs = np.sort(glob.glob(pathname=pathname+'prod_*.tpr'))
@@ -35,7 +35,7 @@ weights = [1.0, 0.0]  # Exclusively MID (subtraction algorithm).
 
 
 os.system('python run_mRMR.py -f %s -s %s -n %s -od %s -iters %i -binsize %f -oe %s '
-          '-om %s -restrict %f %f -w %f %f -cg' %
+          '-om %s -rd %f %f -rr %s -w %f %f -cg' %
           (" ".join(xtcs), " ".join(tprs), ndx, " ".join(xvgs), iters, binsize,
-           entropy_mat_name, hmRMR_name, restrict[0], restrict[1], weights[0],
+           entropy_mat_name, hmRMR_name, restrict[0], restrict[1], 'PRO', weights[0],
            weights[1]))
