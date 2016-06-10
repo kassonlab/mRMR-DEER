@@ -25,8 +25,9 @@ parser.add_argument('-oe', help='output txt file of entropy', default='entropy.t
 parser.add_argument('-om', help='output txt file of high mRMR pairs', default='highmRMR.txt')
 parser.add_argument('-iters', help='number of times to perform mRMR', type=int)
 parser.add_argument('-binsize', help='bin size in nm', type=float, default=0.2)
-parser.add_argument('-restrict', nargs='*', type=float, help='lower and upper distance limits in nm',
-                    default=None)
+parser.add_argument('-rd', nargs='*', type=float, help='lower and upper distance limits in nm',
+                    default=[2.0, 5.0])
+parser.add_argument('-rr', nargs='*', help='Residue names to ignore', default='PRO')
 parser.add_argument('-w', nargs='*', type=float, help='weights for MID (subtraction) and MIQ (division) '
                                                       'in mRMR calculation, respectively',
                     default=[1.0, 0.0])
@@ -41,7 +42,8 @@ entropy_name = args.oe
 mRMR_name = args.om
 iters = args.iters
 bin_size = args.binsize
-restrict = args.restrict
+dist_restrict = args.rd
+resi_restrict = args.rr
 weights = args.w
 aa = not args.cg
 
@@ -68,7 +70,9 @@ else:
 
 
 print colors.BOLD + '\n\tmRMR calculation with ' + str(iters) + ' iterations' + colors.ENDC
-raveled_resis = mRMR(mat=data, weights=weights, restrict=restrict, iters=iters, H=entropy_matrix, bin_size=bin_size)
+raveled_resis = mRMR(mat=data, iters=iters, H=entropy_matrix, weights=[1, 0],
+                     dist_restrict=dist_restrict, resi_restrict=resi_restrict,
+                     resi_tpr=tpr_names[0], AA=aa, bin_size=bin_size)
 print "Highest mRMR pair indices", raveled_resis
 
 
