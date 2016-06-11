@@ -3,23 +3,38 @@ import numpy as np
 import time
 
 
+class colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
+def warn_file_exists(filename):
+    print colors.WARNING + "The file " + filename + " already exists: use rewrite=True to override" + colors.ENDC
+
+
 def strip_filenames(filenames):
     '''
-    This strips off "_cntr" and "_whole" substrings in each filename of a
-    list of filenames. The "_cntr" and "_whole" substrings are used to name
-    pbc -whole and pbc -cntr output xtcs, so it is good to be able to strip
-    off those extras.
-    :param filenames: A list of filenames from which "_cntr" and "_whole" will
-    be removed.
-    :return: A list of the edited filenames.
+    This strips off "_cntr" and "_whole" substrings in each filename of a list of filenames. The "_cntr" and "_whole"
+    substrings are used to name pbc -whole and pbc -cntr output xtcs, so it is good to be able to strip off those
+    extras. BEWARE this will sort the files!
+    :param filenames: A list of filenames from which "_cntr" and "_whole" will be removed.
+    :return: A list of the edited filenames, no extensions.
     '''
     stripped_filenames = []
     for filename in filenames:
         if '_cntr' in filename:
             stripped_filenames.append(filename.replace('_cntr', '')[0:-4])
+        elif '_whole' in filename:
+            stripped_filenames.append(filename.replace('_whole', '')[0:-4])
         else:
             stripped_filenames.append(filename[0:-4])
-    return stripped_filenames
+    return np.unique(stripped_filenames)
 
 
 def make_ndx(tpr_filename, ndx_filename, selection=None, rewrite=False, AA=True):
@@ -29,13 +44,12 @@ def make_ndx(tpr_filename, ndx_filename, selection=None, rewrite=False, AA=True)
         mol_2_and_name_CA
         (mol_1_and_name_CA)_or_(mol_2_and_name_CA)
         mol_1_or_mol_2
-    There is NO flexibility in this selection, except you may flag whether the tpr is a coarse-grained
-    or all-atom simulation. If all-atom, alpha carbons are selected, and if coarse-grained, backbone
-    atoms are selected.
+    Do NOT alter this selection if you are using this with mRMR, except you may flag whether the tpr is a coarse-grained
+    or all-atom simulation. If all-atom, alpha carbons are selected, and if coarse-grained, backbone atoms are selected.
+    You may provide your own selection if you are not using this with mRMR.
     :param tpr_filename: path to a single tpr
     :param ndx_filename: path to output index file
-    :param rewrite: boolean to indicate whether you want to overwrite an existing index file of the
-    same name
+    :param rewrite: boolean to indicate whether you want to overwrite an existing index file of the same name
     :return: None. os.system sends the appropriate gmx select command to console.
     '''
 
@@ -49,13 +63,13 @@ def make_ndx(tpr_filename, ndx_filename, selection=None, rewrite=False, AA=True)
                             '(mol 1 and name BB) or (mol 2 and name BB); mol 1 or mol 2'
         os.system('gmx select -s %s -select "%s" -on %s' % (tpr_filename, selection, ndx_filename))
     else:
-        print "The file " + ndx_filename + " already exists: use rewrite=True to override"
+        warn_file_exists(ndx_filename)
 
 
 def read_ndx(ndx_filename):
     '''
-    Reads a Gromacs ndx file into a dictionary. The dictionary keys are the group names.
-    If used with mRMR algorithm, group names should be the names discussed in make_ndx
+    Reads a Gromacs ndx file into a dictionary. The dictionary keys are the group names. If used with mRMR algorithm,
+    group names should be the names discussed in make_ndx
     :param ndx_filename: path to ndx file
     :return: dictionary of the form index_dict[group id] = [atom ids in group id]
     '''
@@ -84,9 +98,9 @@ def read_ndx(ndx_filename):
 
 def make_xvg(tpr_filename, xtc_filename, ndx_filename, xvg_filename, length_mol1, rewrite=False):
     '''
-    Generates an xvg file of distances using an updated gmx mindist which can output rectangular
-    distance matrices. Calculates the distances between all alpha carbons/ backbone atoms of molecule
-    1 to all alpha carbons/ backbone atoms of molecule 2. Distances are calculated at each time step.
+    Generates an xvg file of distances using an updated gmx mindist which can output rectangular distance matrices.
+    Calculates the distances between all alpha carbons/ backbone atoms of molecule 1 to all alpha carbons/ backbone
+    atoms of molecule 2. Distances are calculated at each time step.
     The xvg will therefore have the form:
     t_0 distance(mol1atom1,mol2atom1) distance(mol1atom2, mol2atom1) ... distance(mol1atomN, mol2atomM)
     t_1 distance(mol1atom1,mol2atom1) ...                                distance(mol1atomN, mol2atomM)
@@ -94,42 +108,44 @@ def make_xvg(tpr_filename, xtc_filename, ndx_filename, xvg_filename, length_mol1
 
     :param tpr_filename: a single tpr for gmx mindist input
     :param xtc_filename: a single xtc for gmx mindist input
-    :param ndx_filename: a single ndx for gmx mindist input (it MUST have the form described in previous
-    function make_ndx. If it does not, everything will BLOW UP)
+    :param ndx_filename: a single ndx for gmx mindist input (it MUST have the form described in previous function
+    make_ndx.)
     :param xvg_filename: a single xvg for gmx mindist output
-    :param length_mol1: The size of the first protein, mol_1_and_name_CA. Input for gmx mindist
-    :param rewrite: boolean to indicate whether you want to overwrite an existing xvg file of the
-    same name
+    :param length_mol1: The size of the first protein, mol_1_and_name_CA. Input for gmx mindist.
+    :param rewrite: boolean to indicate whether you want to overwrite an existing xvg file of the same name
     :return: None. os.system sends the appropriate gmx mindist command to console.
     '''
     if rewrite or not os.path.exists(xvg_filename):
         os.system('echo 2 | gmx mindist -f %s -s %s -n %s -rectmatrix %i -ng 0 -od %s' %
                   (xtc_filename, tpr_filename, ndx_filename, length_mol1, xvg_filename))
     else:
-        print "The file " + xvg_filename + " already exists: use rewrite=True to override"
+        warn_file_exists(xvg_filename)
 
 
 def read_xvg(xvg_filenames, bin_size=0, contact=0, one_traj=True, skip_time=True):
     '''
-    Reads a series of xvg files into a single distance matrix. You may keep each trajectory
-    separate, or concatenate all the trajectories together for use with mRMR.
+    Reads a series of xvg files into a single distance matrix. You may keep each trajectory separate, or concatenate all
+    the trajectories together for use with mRMR.
     :param xvg_filenames: a list of xvg filenames
-    :param bin_size: if you wish to bin the distances for use with mRMR, provide a bin size in
-    nm. If bin_size is 0, distances will be kept as floating point.
-    :param contact: if you want to get contact maps instead of distances, specify a contact
-    length in nm.
+    :param bin_size: if you wish to bin the distances for use with mRMR, provide a bin size in nm. If bin_size is 0,
+    distances will be kept as floating point.
+    :param contact: if you want to get contact maps instead of distances, specify a contact length in nm.
     :param one_traj: boolean to indicate whether trajectories are concatenated. Must be True
     for use with mRMR algorithm.
-    :param skip_time: whether you want to read in the time step as well as the distances.
-    This was added for flexibility, but isn't useful for mRMR. Need to set True.
-    :return: array of distances. data[i,j] = pair j distance value at frame number i if you
-    are not keeping track of time or the trajectories. If you are keeping track of the
-    trajectory number, data[i,0] = traj_num. If you are keeping track of the time, data[i,1]=
-    time.
+    :param skip_time: whether you want to read in the time step as well as the distances. This was added for
+    flexibility, but isn't useful for mRMR. Need to set True.
+    :return: array of distances. data[i,j] = pair j distance value at frame number i if you are not keeping track of
+    time or the trajectories. If you are keeping track of the trajectory number, data[i,0] = traj_num. If you are
+    keeping track of the time, data[i,1]=time.
     '''
 
     data = []
     traj_num = 0
+
+    if bin_size != 0:
+        print colors.HEADER + "Distances will be binned with bin size: " + str(bin_size) + colors.ENDC
+    if contact != 0:
+        print colors.HEADER + "Contact maps will be loaded with contact cutoff: " + str(contact) + " nm" + colors.ENDC
 
     for xvg_filename in xvg_filenames:
         start_time = time.time()
@@ -170,6 +186,7 @@ def read_xvg(xvg_filenames, bin_size=0, contact=0, one_traj=True, skip_time=True
         end_time = time.time()
         print "Time elapsed to read trajectory", traj_num, ":", end_time-start_time
         traj_num += 1
+
     return np.array(data)
 
 
@@ -208,19 +225,13 @@ def pbc_center(xtcs, tprs, ndx, rewrite=False):
     '''
 
     make_ndx(tpr_filename=tprs[0], ndx_filename=ndx, rewrite=rewrite)
-
-    orig_xtcs = []
-    n_files = 0
-    for xtc in xtcs:
-        if ("whole" not in xtc) and ("cntr" not in xtc):
-            orig_xtcs.append(xtc)
-            n_files += 1
-
-    stripped_xtcs = [orig_xtc[0:-4] for orig_xtc in orig_xtcs]
+    stripped = strip_filenames(xtcs)
+    orig_xtcs = [strip +'.xtc' for strip in stripped]
+    n_files = len(orig_xtcs)
 
     for i in range(n_files):
-        whole_name = stripped_xtcs[i] + '_whole.xtc'
-        cntr_name = stripped_xtcs[i] + '_cntr.xtc'
+        whole_name = stripped[i] + '_whole.xtc'
+        cntr_name = stripped[i] + '_cntr.xtc'
 
         if os.path.exists(whole_name) and not rewrite:
             print "The file", whole_name, "already exists: use rewrite=True to override"
@@ -252,7 +263,7 @@ def write_pdbs(xtcs, tprs, ndx, pdbs, dt=100000, rewrite=False):
     n_files = len(xtcs)
     for i in range(n_files):
         if os.path.exists(pdbs[i]) and not rewrite:
-            print "The file", pdbs[i], "already exists: use rewrite=True to override"
+            warn_file_exists(pdbs[i])
         else:
             os.system('echo 3 | gmx trjconv -f %s -s %s -n %s -conect -dt %i -o %s' %
                       (xtcs[i], tprs[i], ndx, dt, pdbs[i]))
