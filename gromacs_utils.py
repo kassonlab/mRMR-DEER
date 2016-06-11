@@ -269,28 +269,23 @@ def write_pdbs(xtcs, tprs, ndx, pdbs, dt=100000, rewrite=False):
                       (xtcs[i], tprs[i], ndx, dt, pdbs[i]))
 
 
-def pre_process(xtcs, tprs, ndx, xvgs, bin_size=0, AA=True, one_traj=True, rewrite=False):
+def pre_process(xtcs, tprs, ndx, xvgs, AA=True, rewrite=False):
     '''
     This function:
         1. Makes a single ndx file using a single tpr.
         2. Reads that ndx file to determine the size of the first protein.
         3. Takes care of pbc problems by clustering and centering with pbc_center.
         4. Makes a bunch of xvg files using a list of xtcs and tprs.
-        5. Reads in those xvg files to a single distance matrix.
-        6. Returns the distance matrix.
     :param xtcs: list of xtcs
     :param tprs: list of tprs
     :param ndx: single index file name. If the index file does not already exist, one will
     be created using make_ndx
     :param xvgs: a list of xvg file names. If any one of the xvgs does not already exist, it
     will be created using make_xvg.
-    :param bin_size: 0 if you do not want to bin the distance data, otherwise the bin size in nm.
     :param AA: indicates whether the trajectories are all-atom or coarse-grained.
-    :param one_traj: whether you want to concatenate the trajectories. You must concatenate for
-    use with mRMR algorithm.
     :param rewrite: boolean to indicate whether you want to overwrite an existing index file of the
     same name
-    :return: distance matrix.
+    :return None. Writes appropriate gmx commands to console.
     '''
 
     cntr_xtcs = []
@@ -314,7 +309,3 @@ def pre_process(xtcs, tprs, ndx, xvgs, bin_size=0, AA=True, one_traj=True, rewri
 
         make_xvg(tpr_filename=tprs[i], xtc_filename=cntr_xtcs[i], ndx_filename=ndx,
                  xvg_filename=xvgs[i], length_mol1=size_mol1, rewrite=rewrite)
-
-    return read_xvg(xvg_filenames=xvgs, one_traj=one_traj, bin_size=bin_size), mol_ndx
-
-
