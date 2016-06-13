@@ -212,7 +212,7 @@ def mRMR(mat, iters, entropy_filename, weights=[1, 0], dist_restrict=None, resi_
                         mi_mat[test_idx, high_idx] = mi_fast(mat[:, test_idx], mat[:, high_idx])
                         mi_mat[high_idx, test_idx] = mi_mat[test_idx, high_idx]
 
-                    pair_pair_mi += H[test_idx] + H[high_idx] - mi_mat[test_idx, high_idx]
+                    pair_pair_mi += mi_mat[test_idx, high_idx]
                 mRMR_scores.append(weights[0]*(H[test_idx] - pair_pair_mi/m) +
                                    weights[1]*H[test_idx]/pair_pair_mi/m)
             print "Minimum mRMR score:", np.min(mRMR_scores)
