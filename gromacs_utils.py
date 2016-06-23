@@ -15,17 +15,22 @@ class colors:
 
 
 def warn_file_exists(filename):
-    print colors.WARNING + "The file " + filename + " already exists: use rewrite=True to override" + colors.ENDC
+    """
+    Prints a warning that a file already exists and will not be overwritten.
+    :param filename: the filename as a string.
+    """
+    print colors.WARNING + "WARNING:" + colors.ENDC + "The file " + filename + \
+          " already exists: use rewrite=True to override"
 
 
 def strip_filenames(filenames):
-    '''
+    """
     This strips off "_cntr" and "_whole" substrings in each filename of a list of filenames. The "_cntr" and "_whole"
     substrings are used to name pbc -whole and pbc -cntr output xtcs, so it is good to be able to strip off those
     extras. BEWARE this will sort the files!
     :param filenames: A list of filenames from which "_cntr" and "_whole" will be removed.
     :return: A list of the edited filenames, no extensions.
-    '''
+    """
     stripped_filenames = []
     for filename in filenames:
         if '_cntr' in filename:
@@ -38,7 +43,7 @@ def strip_filenames(filenames):
 
 
 def make_ndx(tpr_filename, ndx_filename, selection=None, rewrite=False, AA=True):
-    '''
+    """
     Generates an index file using gmx select. The output index file will have the following groups:
         mol_1_and_name_CA
         mol_2_and_name_CA
@@ -50,8 +55,7 @@ def make_ndx(tpr_filename, ndx_filename, selection=None, rewrite=False, AA=True)
     :param tpr_filename: path to a single tpr
     :param ndx_filename: path to output index file
     :param rewrite: boolean to indicate whether you want to overwrite an existing index file of the same name
-    :return: None. os.system sends the appropriate gmx select command to console.
-    '''
+    """
 
     if rewrite or not os.path.exists(ndx_filename):
         if selection is None:
@@ -67,12 +71,12 @@ def make_ndx(tpr_filename, ndx_filename, selection=None, rewrite=False, AA=True)
 
 
 def read_ndx(ndx_filename):
-    '''
+    """
     Reads a Gromacs ndx file into a dictionary. The dictionary keys are the group names. If used with mRMR algorithm,
     group names should be the names discussed in make_ndx
     :param ndx_filename: path to ndx file
     :return: dictionary of the form index_dict[group id] = [atom ids in group id]
-    '''
+    """
 
     index_dict = {}
     index_file = open(ndx_filename, 'r')
@@ -97,7 +101,7 @@ def read_ndx(ndx_filename):
 
 
 def make_xvg(tpr_filename, xtc_filename, ndx_filename, xvg_filename, length_mol1, rewrite=False):
-    '''
+    """
     Generates an xvg file of distances using an updated gmx mindist which can output rectangular distance matrices.
     Calculates the distances between all alpha carbons/ backbone atoms of molecule 1 to all alpha carbons/ backbone
     atoms of molecule 2. Distances are calculated at each time step.
@@ -113,8 +117,7 @@ def make_xvg(tpr_filename, xtc_filename, ndx_filename, xvg_filename, length_mol1
     :param xvg_filename: a single xvg for gmx mindist output
     :param length_mol1: The size of the first protein, mol_1_and_name_CA. Input for gmx mindist.
     :param rewrite: boolean to indicate whether you want to overwrite an existing xvg file of the same name
-    :return: None. os.system sends the appropriate gmx mindist command to console.
-    '''
+    """
     if rewrite or (not os.path.exists(xvg_filename)):
         os.system('echo 2 | gmx mindist -f %s -s %s -n %s -rectmatrix %i -ng 0 -od %s' %
                   (xtc_filename, tpr_filename, ndx_filename, length_mol1, xvg_filename))
@@ -123,7 +126,7 @@ def make_xvg(tpr_filename, xtc_filename, ndx_filename, xvg_filename, length_mol1
 
 
 def read_xvg(xvg_filenames, bin_size=0, contact=0, one_traj=True, skip_time=True):
-    '''
+    """
     Reads a series of xvg files into a single distance matrix. You may keep track of the time and/or trajectory number
     with one_traj and skip_time, or read in only the distances. This can perform binning and calculate contacts maps.
     For use with mRMR, you must bin initially. (Binning while reading the files prevents memory overflow issues).
@@ -139,13 +142,13 @@ def read_xvg(xvg_filenames, bin_size=0, contact=0, one_traj=True, skip_time=True
     time or the trajectories. If you are keeping track of the trajectory number, data[i,0] = traj_num. If you are
     keeping track of just the time, data[i,0]=time. If you are keeping track of both trajectory number and time,
     data[i,0] = traj_num and data[i,1] = time.
-    '''
+    """
 
     data = []
     traj_num = 0
 
     if bin_size != 0:
-        print "Distances will be binned with bin size:", bin_size
+        print "Distances will be binned with bin size:", bin_size, "nm"
     if contact != 0:
         print "Contact maps will be loaded with contact cutoff:", contact, "nm"
 
@@ -208,7 +211,7 @@ def read_xvg(xvg_filenames, bin_size=0, contact=0, one_traj=True, skip_time=True
 
 
 def dump_frame(xtc, tpr, ndx, time, pdb):
-    '''
+    """
     Uses gmx trjconv -dump to pull the frame at "time" and dump it to a pdb.
     This is useful for restarting all-atom simulations from coarse-grained
     simulations. For use with the file cluster_dump.py.
@@ -217,13 +220,12 @@ def dump_frame(xtc, tpr, ndx, time, pdb):
     :param ndx: An index file, not necessarily of the form in make_ndx
     :param time: The time (in ps) you want to dump.
     :param pdb: The name of the output pdb.
-    :return: None. os.system sends appropriate gmx command to console
-    '''
+    """
     os.system('gmx trjconv -f %s -s %s -n %s -dump %f -o %s' % (xtc, tpr, ndx, time, pdb))
 
 
 def pbc_center(xtcs, tprs, ndx, rewrite=False):
-    '''
+    """
     This function is used for pre-processing trajectories that have pbc issues. It does the following:
         1. Make any split atoms whole using gmx trjconv -pbc whole
         2. Center on a single protein. Ideally, we would center on both proteins. However, there are problems with gmx
@@ -235,8 +237,7 @@ def pbc_center(xtcs, tprs, ndx, rewrite=False):
     :param ndx: A single ndx filename. The ndx file will be written using make_ndx if it
     does not already exist.
     :param rewrite: Whether to rewrite the ndx file and the intermediate xtc files.
-    :return: None. Writes appropriate gmx commands to console.
-    '''
+    """
 
     make_ndx(tpr_filename=tprs[0], ndx_filename=ndx, rewrite=rewrite)
     stripped = strip_filenames(xtcs)
@@ -261,7 +262,7 @@ def pbc_center(xtcs, tprs, ndx, rewrite=False):
 
 
 def write_pdbs(xtcs, tprs, ndx, pdbs, dt=100000, rewrite=False):
-    '''
+    """
     Uses gmx trjconv to write out pdbs at intervals of dt. The pdbs are written with connect records. This is really for
     visualization to make sure centered trajectories are not moving through the periodic box. It is not called in mRMR
     algorithm, so if you want to check you need to write your own script.
@@ -271,8 +272,7 @@ def write_pdbs(xtcs, tprs, ndx, pdbs, dt=100000, rewrite=False):
     :param pdbs: A list of output pdbs. Must be the same length as your xtc list.
     :param dt: Intervals at which you wish to write out pdbs. See GROMACS documentation of trjconv.
     :param rewrite: Whether to overwrite the pdbs.
-    :return: None. Writes appropriate gmx commands to console.
-    '''
+    """
     n_files = len(xtcs)
     for i in range(n_files):
         if os.path.exists(pdbs[i]) and not rewrite:
@@ -283,7 +283,7 @@ def write_pdbs(xtcs, tprs, ndx, pdbs, dt=100000, rewrite=False):
 
 
 def pre_process(xtcs, tprs, ndx, xvgs, AA=True, rewrite=False):
-    '''
+    """
     This function:
         1. Makes a single ndx file using a single tpr.
         2. Reads that ndx file to determine the size of the first protein.
@@ -296,10 +296,7 @@ def pre_process(xtcs, tprs, ndx, xvgs, AA=True, rewrite=False):
     will be created using make_xvg.
     :param AA: indicates whether the trajectories are all-atom or coarse-grained.
     :param rewrite: boolean to indicate whether you want to overwrite an existing index file of the same name.
-    :return None. Writes appropriate gmx commands to console.
-    '''
-
-    n_files = 0
+    """
 
     make_ndx(tprs[0], ndx, rewrite=rewrite, AA=AA)
     mol_ndx = read_ndx(ndx_filename=ndx)

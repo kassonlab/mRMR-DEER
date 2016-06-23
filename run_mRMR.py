@@ -2,18 +2,6 @@ from gromacs_utils import *
 from mRMR import *
 import argparse
 
-
-# Anal-retentive Jennifer color codes outputs.
-class colors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
 # Command line arguments
 parser = argparse.ArgumentParser(description='Runs mRMR algorithm on a list of trajectories. Be aware that this code '
                                              'will sort the xtcs and tprs using np.sort(). You need to be sure that the'

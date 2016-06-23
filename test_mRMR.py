@@ -1,37 +1,52 @@
 import os
 import glob
 import numpy as np
-
-# This is a working test run of the mRMR algorithm using 540 microsecond CG trajectory
+import sys
+from gromacs_utils import strip_filenames
 
 pathname = '/home/jmh5sf/dimer_ngon/ngon/HPC_runs/cg/cg_540mus/'
-
-xtcs = np.sort(glob.glob(pathname=pathname+'total_*.xtc'))
-tprs = np.sort(glob.glob(pathname=pathname+'prod_*.tpr'))
-
-
-# You need to exclude globbed files that include "whole" and "cntr", otherwise you will
-# end up generating files that go like "_cntr_cntr.pdb", etc.
-
-orig_xtcs = []
-n_files = 0
-for xtc in xtcs:
-    if ("whole" not in xtc) and ("cntr" not in xtc):
-        orig_xtcs.append(xtc)
-        n_files += 1
-
-# Get the right numbering for output xvgs.
-traj_nums = [orig_xtc[-6:-4] for orig_xtc in orig_xtcs]
-xvgs = [pathname+'dist_'+traj_nums[i]+'.xvg' for i in range(n_files)]
-
-
-ndx = pathname+'entropy.ndx'
 iters = 3
 binsize = 0.2
-entropy_mat_name = pathname + 'entropy.txt'
-hmRMR_name = pathname + 'highmRMR.txt'
 restrict = [2.0, 5.0]  # Do not include pairs with distances < 20 A or > 50 A
 weights = [1.0, 0.0]  # Exclusively MID (subtraction algorithm).
+rr = 'PRO'
+
+if sys.argv[-1] == 'large':
+
+    xtcs = np.sort(glob.glob(pathname=pathname+'total_*.xtc'))
+    tprs = np.sort(glob.glob(pathname=pathname+'prod_*.tpr'))
+
+    orig_xtcs = strip_filenames(xtcs)
+    n_files = len(orig_xtcs)
+
+    # Get the right numbering for output xvgs.
+    traj_nums = [orig_xtc[-2:] for orig_xtc in orig_xtcs]
+    xvgs = [pathname+'dist_'+traj_nums[i]+'.xvg' for i in range(n_files)]
+
+    ndx = 'large_test/entropy.ndx'
+    entropy_mat_name = 'large_test/entropy.p'
+    hmRMR_name = 'large_test/highmRMR.txt'
+
+elif sys.argv[-1] == 'small':
+
+    pathname = '/home/jmh5sf/dimer_ngon/ngon/HPC_runs/cg/cg_540mus/'
+
+    xtcs = [pathname + 'total_cg_10.xtc', pathname + 'total_cg_11.xtc']
+    tprs = [pathname + 'prod_center_10.tpr', pathname + 'prod_center_11.tpr']
+
+    orig_xtcs = strip_filenames(xtcs)
+    n_files = len(orig_xtcs)
+
+    # Get the right numbering for output xvgs.
+    traj_nums = [orig_xtc[-2:] for orig_xtc in orig_xtcs]
+    xvgs = [pathname + 'dist_' + traj_nums[i] + '.xvg' for i in range(n_files)]
+
+    ndx = 'small_test/entropy.ndx'
+    entropy_mat_name = 'small_test/entropy.p'
+    hmRMR_name = 'small_test/highmRMR.txt'
+
+else:
+    raise ValueError('Must specify large or small test run.')
 
 
 os.system('python run_mRMR.py -f %s -s %s -n %s -od %s -iters %i -binsize %f -oe %s '

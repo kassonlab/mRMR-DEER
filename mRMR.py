@@ -6,19 +6,19 @@ import time
 
 
 def entropy(arr):
-    '''
+    """
     Calculates the entropy of a distribution:
         S = - SUM_i (p_i * ln p_i)
     This is the true entropy if arr is a pdf, but notice that you will have to divide by an appropriate normalization if
     p_i's are counts rather than probabilities.
     :param arr: a probability distribution
     :return: entropy of arr
-    '''
+    """
     return np.sum([-p * np.log(p) if p else 0 for p in arr])
 
 
 def h_fast(x):
-    '''
+    """
     Calculates the column entropies of the matrix x. This assumes that the columns of x have been binned but NOT
     histogrammed. That is, it will perform the following calculation:
         S = -SUM_i [n_i/N ln(n_i/N)]
@@ -29,7 +29,7 @@ def h_fast(x):
     case of mRMR, m is the number of frames and n is the number of pairs of residues (x is essentially a processed xvg
     from gmx mindist).
     :return: column entropy (n dimensional array)
-    '''
+    """
     n_samples, _ = x.shape
     bin_range = [np.min(x), np.max(x)]
     n_bins = bin_range[1] - bin_range[0]
@@ -43,12 +43,12 @@ def h_fast(x):
 
 
 def mi_fast(x, y):
-    '''
+    """
     A clever algorithm for calculating the mutual information of the arrays x and y. Pulled from Kasson git: numpy_mi.py
     :param x: an array that has been binned but not yet been histogrammed.
     :param y: an array that has been binned but not yet been histogrammed.
     :return: mutual information of x and y.
-    '''
+    """
     n_samples = len(x)
     bin_range = [min(np.min(x), np.min(y)), max(np.max(x), np.max(y))]
     n_bins = bin_range[1] - bin_range[0]
@@ -63,7 +63,7 @@ def mi_fast(x, y):
 
 
 def get_permitted_pairs(mat, dist_range=None, resi_select=None, resi_tpr=None, AA=True, bin_size=0):
-    '''
+    """
     This function allows you to restrict the pairs you wish to consider in the mRMR algorithm based on their average
     distances and/or residue name. DEER measurements are reliable for distances only in the range of about 20 - 50 nm.
     Therefore, we wish to only consider pairs with an average distance in simulation of 20 - 50 nm. Similarly, we may
@@ -77,7 +77,7 @@ def get_permitted_pairs(mat, dist_range=None, resi_select=None, resi_tpr=None, A
     :param bin_size: This is clunky. Although the matrix has already been binned, we need the bin_size to convert from
     the bin number back to absolute distance in nm.
     :return: a list of permitted pair numbers.
-    '''
+    """
 
     _, num_pairs = mat.shape
 
@@ -132,7 +132,7 @@ def get_permitted_pairs(mat, dist_range=None, resi_select=None, resi_tpr=None, A
 def mRMR(mat, iters, entropy_filename, weights=[1, 0], dist_restrict=None, resi_restrict=None,
          resi_tpr=None, AA=True, bin_size=0, rewrite=False):
 
-    '''
+    """
     This method is an implementation of the mRMR algorithm described in http://dx.doi.org/10.1142/S0219720005001004
     (Here, however, we use a weighted sum of both the MID and MIQ criteria, not just one or the other).
 
@@ -151,7 +151,7 @@ def mRMR(mat, iters, entropy_filename, weights=[1, 0], dist_restrict=None, resi_
     size that was used. That way we can map bin number to absolute distance with get_permitted_pairs()
     :param rewrite: boolean to indicate whether you want to rewrite the entropy file.
     :return: a list of pair numbers, ordered from highest to lowest mRMR.
-    '''
+    """
 
     _, n_pairs = mat.shape  # Get the number of pairs in your matrix
 
