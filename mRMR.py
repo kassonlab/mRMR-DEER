@@ -51,7 +51,7 @@ def mi_fast(x, y):
     """
     n_samples = len(x)
     bin_range = [min(np.min(x), np.min(y)), max(np.max(x), np.max(y))]
-    n_bins = bin_range[1] - bin_range[0]
+    n_bins = bin_range[1] - bin_range[0]+1
 
     xy_c = np.histogram2d(x, y, bins=n_bins, range=[bin_range, bin_range])[0]
     x_c = np.sum(xy_c, 1)
