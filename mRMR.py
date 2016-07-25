@@ -32,7 +32,7 @@ def h_fast(x):
     """
     n_samples, _ = x.shape
     bin_range = [np.min(x), np.max(x)]
-    n_bins = bin_range[1] - bin_range[0]
+    n_bins = bin_range[1] - bin_range[0] + 1
 
     # Bincount along columns
     hist = np.apply_along_axis(lambda y: np.histogram(y, bins=n_bins, range=bin_range)[0], axis=0, arr=x)
