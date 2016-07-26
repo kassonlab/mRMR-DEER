@@ -100,9 +100,9 @@ def read_ndx(ndx_filename):
     return index_dict
 
 
-def make_xvg(tpr_filename, xtc_filename, ndx_filename, xvg_filename, length_mol1, rewrite=False):
+def make_xvg(tpr_filename, xtc_filename, xvg_filename, AA=True, rewrite=False):
     """
-    Generates an xvg file of distances using an updated gmx mindist which can output rectangular distance matrices.
+    Generates an xvg file of distances using gmx pairdist which can output rectangular distance matrices.
     Calculates the distances between all alpha carbons/ backbone atoms of molecule 1 to all alpha carbons/ backbone
     atoms of molecule 2. Distances are calculated at each time step.
     The xvg will therefore have the form:
@@ -112,15 +112,19 @@ def make_xvg(tpr_filename, xtc_filename, ndx_filename, xvg_filename, length_mol1
 
     :param tpr_filename: a single tpr for gmx mindist input
     :param xtc_filename: a single xtc for gmx mindist input
-    :param ndx_filename: a single ndx for gmx mindist input (it MUST have the form described in previous function
-    make_ndx.)
     :param xvg_filename: a single xvg for gmx mindist output
-    :param length_mol1: The size of the first protein, mol_1_and_name_CA. Input for gmx mindist.
+    :param AA: True for all-atom simulations.
     :param rewrite: boolean to indicate whether you want to overwrite an existing xvg file of the same name
     """
     if rewrite or (not os.path.exists(xvg_filename)):
-        os.system('echo 2 | gmx mindist -f %s -s %s -n %s -rectmatrix %i -ng 0 -od %s' %
-                  (xtc_filename, tpr_filename, ndx_filename, length_mol1, xvg_filename))
+        if AA:
+            ref = "\"mol 1 and name CA\""
+            sel = "\"mol 2 and name CA\""
+        else:
+            ref = "\"mol 1 and name BB\""
+            sel = "\"mol 2 and name BB\""
+        os.system('gmx pairdist -f %s -s %s -o %s -ref %s -sel %s -refgrouping res -selgrouping res' %
+                  (xtc_filename, tpr_filename, xvg_filename, ref, sel))
     else:
         warn_file_exists(xvg_filename)
 
@@ -286,9 +290,8 @@ def pre_process(xtcs, tprs, ndx, xvgs, AA=True, rewrite=False):
     """
     This function:
         1. Makes a single ndx file using a single tpr.
-        2. Reads that ndx file to determine the size of the first protein.
-        3. Takes care of pbc problems by clustering and centering with pbc_center.
-        4. Makes a bunch of xvg files using a list of xtcs and tprs.
+        2. Takes care of pbc problems by clustering and centering with pbc_center.
+        3. Makes a bunch of xvg files using a list of xtcs and tprs.
     :param xtcs: list of xtcs
     :param tprs: list of tprs. MUST BE IN CORRECT ORDER.
     :param ndx: single index file name. If the index file does not already exist, one will be created using make_ndx
@@ -299,11 +302,6 @@ def pre_process(xtcs, tprs, ndx, xvgs, AA=True, rewrite=False):
     """
 
     make_ndx(tprs[0], ndx, rewrite=rewrite, AA=AA)
-    mol_ndx = read_ndx(ndx_filename=ndx)
-    if AA:
-        size_mol1 = len(mol_ndx['mol_1_and_name_CA'])
-    else:
-        size_mol1 = len(mol_ndx['mol_1_and_name_BB'])
 
     pbc_center(xtcs, tprs, ndx)
 
@@ -312,5 +310,5 @@ def pre_process(xtcs, tprs, ndx, xvgs, AA=True, rewrite=False):
 
     for i in range(n_files):
 
-        make_xvg(tpr_filename=tprs[i], xtc_filename=cntrd_xtcs[i], ndx_filename=ndx,
-                 xvg_filename=xvgs[i], length_mol1=size_mol1, rewrite=rewrite)
+        make_xvg(tpr_filename=tprs[i], xtc_filename=cntrd_xtcs[i], AA=AA,
+                 xvg_filename=xvgs[i], rewrite=rewrite)

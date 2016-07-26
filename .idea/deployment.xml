@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" serverName="pmks09">
+    <serverData>
+      <paths name="pmks09">
+        <serverdata>
+          <mappings>
+            <mapping deploy="jmhcode/mRMR" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>

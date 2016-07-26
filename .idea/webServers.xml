@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="ad7699d8-37f5-48f1-9691-78dacb4293c9" name="pmks09" url="http://pmks09.med.virginia.edu">
+        <fileTransfer host="pmks09.med.virginia.edu" port="22" rootFolder="/array01/jmh5sf" accessType="SFTP" username="jmh5sf">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
