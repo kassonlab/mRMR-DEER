@@ -1,78 +1,43 @@
 from gromacs_utils import *
 from mRMR import *
 import argparse
+import numpy as np
 
-# Command line arguments
-parser = argparse.ArgumentParser(description='Runs mRMR algorithm on a list of trajectories. Be aware that this code '
-                                             'will sort the xtcs and tprs using np.sort(). You need to be sure that the'
-                                             'files are named in such a way that each xtc will correspond to the '
-                                             'correct tpr after sorting. This should not be a problem in all but the '
-                                             'most pathalogical of naming schemes :-)')
-parser.add_argument('-f', nargs='*', help='list of xtcs')
-parser.add_argument('-s', nargs='*', help='list of tprs')
-parser.add_argument('-n', help='ndx file for output')
-parser.add_argument('-od', nargs='*', help='list of xvgs for output.')
-parser.add_argument('-oe', help='output cPickled file of entropy', default='entropy.p')
-parser.add_argument('-om', help='output txt file of high mRMR pairs', default='highmRMR.txt')
-parser.add_argument('-iters', help='number of times to perform mRMR', type=int)
-parser.add_argument('-binsize', help='bin size in nm', type=float, default=0.2)
-parser.add_argument('-rd', nargs='*', type=float, help='lower and upper distance limits in nm (for excluding difficult'
-                                                       'DEER pairs)', default=[2.0, 5.0])
-parser.add_argument('-rr', nargs='*', help="Residue names to ignore (for excluding residues that are crucial to the "
-                                           "proteins you're studying)", default=None)
-parser.add_argument('-w', nargs='*', type=float, help='weights for MID (subtraction) and MIQ (division) in mRMR '
-                                                      'calculation, respectively', default=[1.0, 0.0])
-parser.add_argument('-cg', action='store_true', help='Use this flag for coarse-grained simulations')
-args = parser.parse_args()
 
-xtc_names = args.f
-tpr_names = args.s
-ndx_name = args.n
-xvg_names = args.od
-entropy_name = args.oe
-mRMR_name = args.om
-iters = args.iters
-bin_size = args.binsize
-dist_restrict = args.rd
-resi_restrict = args.rr
-weights = args.w
-aa = not args.cg
+def convert_to_pairs(tri_resis, num_residues):
+    row_idx, col_idx = np.triu_indices(num_residues, k=1)
+    pairs = []
+    for tri_resi in tri_resis:
+        pairs.append([row_idx[tri_resi], col_idx[tri_resi]])
+    return np.add(pairs, 1)
 
-# Align all the trajectories and put them in the center of the periodic box so that gmx mindist
-# can calculate distances properly. All xvgs are written in pre_process step.
+if __name__ == "__main__":
+    # Command line arguments
+    parser = argparse.ArgumentParser(description='Runs mRMR algorithm on csv of distance data.')
+    parser.add_argument('-f', nargs='*', help='Configuration file')
+    parser.add_argument('-i', type=int, help='Number of mRMR pairs to calculate')
+    parser.add_argument('-n', type=int, help='Number of residues in protein')
+    args = parser.parse_args()
+    iters = args.i
 
-print colors.BOLD + '\n\tPreprocessing trajectories' + colors.ENDC
-pre_process(xtcs=xtc_names, tprs=tpr_names, ndx=ndx_name, xvgs=xvg_names, AA=aa)
+    print colors.BOLD + '\n\tmRMR calculation with ' + str(iters) + ' iterations' + colors.ENDC
+    mRMR_config = MRMRConfig(args.f, rewrite=False)
+    if mRMR_config.chains == 1:
+        num_residues = args.n
+    else:
+        raise ValueError("No support for multiple chains yet")
 
-print colors.BOLD + '\n\tReading in xvgs' + colors.ENDC
-data = read_xvg(xvg_filenames=xvg_names, bin_size=bin_size)
-n_samples, n_pairs = data.shape
+    resis = mRMR_config.mRMR(iters, store_in_memory=False)
+    print 'MID Weight:', mRMR_config.weights[0]
+    print 'MIQ Weight:', mRMR_config.weights[1]
+    print "Highest mRMR pair indices", resis
 
-print colors.BOLD + '\n\tmRMR calculation with ' + str(iters) + ' iterations' + colors.ENDC
-print 'MID Weight:', weights[0]
-print 'MIQ Weight:', weights[1]
-raveled_resis = mRMR(mat=data, iters=iters, entropy_filename=entropy_name, weights=weights, dist_restrict=dist_restrict,
-                     resi_restrict=resi_restrict, resi_tpr=tpr_names[0], AA=aa, bin_size=bin_size)
-print "Highest mRMR pair indices", raveled_resis
-
-# Getting the length of the two proteins so that the flattened indices of raveled_resis can be turned
-# into non-flattened indices. In other words, pair 5 -> (ceacam 1, opa 5).
-
-ndx_dict = read_ndx(ndx_filename=ndx_name)
-if aa:
-    mol1_len = len(ndx_dict['mol_1_and_name_CA'])
-    mol2_len = len(ndx_dict['mol_2_and_name_CA'])
-else:
-    mol1_len = len(ndx_dict['mol_1_and_name_BB'])
-    mol2_len = len(ndx_dict['mol_2_and_name_BB'])
-
-print "Length of molecule 1:", mol1_len, "\nLength of molecule 2:", mol2_len
-
-# Converts flattened indices to matrix indices.
-resis = np.unravel_index(raveled_resis, (mol1_len, mol2_len))
-print "Converted to residue numbers (Molecule 1, Molecule 2):", resis
-print colors.BOLD + "Please remember that your residues are now zero-indexed!" + colors.ENDC
-print "Saving to file", mRMR_name
-np.savetxt(mRMR_name, resis, fmt='%g')
+    # Converts flattened indices to matrix indices.
+    pairs = convert_to_pairs(resis, num_residues)
+    print "Converted to residue numbers (Molecule 1, Molecule 2):", pairs
+    #print colors.BOLD + "Please remember that your residues are now zero-indexed!" + colors.ENDC
+    final_filename = "%s-MID%0.2f-MIQ%0.2f.txt" % (mRMR_config.mRMR_filename[:-4], mRMR_config.weights[0],
+                                                   mRMR_config.weights[1])
+    np.savetxt(final_filename, pairs, fmt="%i")
 
 
