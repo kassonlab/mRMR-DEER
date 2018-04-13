@@ -6,6 +6,40 @@ import time
 from ConfigParser import RawConfigParser
 
 
+def generate_bins(vector, incr):
+    """
+    Categorizes a vector based on a set increment
+    :param vector: vector to categorize
+    :param incr: spacing between the bins
+    :return: categorized vector
+    """
+    mx = np.max(vector)
+    mn = np.min(vector)
+    spread = mx - mn
+    curr = mn
+    return np.arange(mn - incr, mx + incr, incr)
+
+def digitize_vector(vector, incr):
+    return np.digitize(vector, generate_bins(vector, incr)).astype('int16')
+
+def mi_all_to_one(x, y):
+    """Runs mutual information on all columns."""
+    dat1 = x
+    #print x
+    dat2 = y
+    ncols1 = dat1.shape[1]
+    ncols2 = dat2.shape[1] if dat2.ndim > 1 else 1
+    mimat = np.zeros([ncols1, ncols2])
+    for i in range(ncols1):
+      if ncols2 > 1:
+        for j in range(ncols2):
+            mimat[i, j] = mi_fast(dat1[:, i], dat2[:, j])
+      else:
+        # case for 1-dimensional dat2
+        mimat[i] = mi_fast(dat1[:, i], dat2)
+      #print 'Finished %d' % i
+    return mimat
+
 def entropy(arr):
     """
     Calculates the entropy of a distribution:
@@ -16,6 +50,28 @@ def entropy(arr):
     :return: entropy of arr
     """
     return np.sum([-p * np.log(p) if p else 0 for p in arr])
+
+
+def H(arr):
+    """
+    Calculates the entropy of a distribution:
+        S = - SUM_i (p_i * ln p_i)
+    This is the true entropy if arr is a pdf, but notice that you will have to divide by an appropriate normalization if
+    p_i's are counts rather than probabilities.
+    :param arr: a probability distribution
+    :return: entropy of arr
+    """
+    x = arr
+    y = arr
+    n_samples = len(x)
+    bin_range = [min(np.min(x), np.min(y)), max(np.max(x), np.max(y))]
+    n_bins = bin_range[1] - bin_range[0] + 1
+
+    xy_c = np.histogram2d(x, y, bins=n_bins, range=[bin_range, bin_range])[0]
+    x_c = np.sum(xy_c, 1)
+    y_c = np.sum(xy_c, 0)
+    Hx = entropy(np.ravel(x_c)) / n_samples + np.log(n_samples)
+    return Hx
 
 
 def h_fast(x):
@@ -63,38 +119,99 @@ def mi_fast(x, y):
     return Hx + Hy - Hxy
 
 
+def mi_fast_norm(x, y):
+    """
+    A clever algorithm for calculating the mutual information of the arrays x and y. Pulled from Kasson git: numpy_mi.py
+    :param x: an array that has been binned but not yet been histogrammed.
+    :param y: an array that has been binned but not yet been histogrammed.
+    :return: mutual information of x and y.
+    """
+    n_samples = len(x)
+    bin_range = [min(np.min(x), np.min(y)), max(np.max(x), np.max(y))]
+    n_bins = bin_range[1] - bin_range[0] + 1
+
+    xy_c = np.histogram2d(x, y, bins=n_bins, range=[bin_range, bin_range])[0]
+    x_c = np.sum(xy_c, 1)
+    y_c = np.sum(xy_c, 0)
+    Hxy = entropy(np.ravel(xy_c)) / n_samples + np.log(n_samples)
+    Hx = entropy(np.ravel(x_c)) / n_samples + np.log(n_samples)
+    Hy = entropy(np.ravel(y_c)) / n_samples + np.log(n_samples)
+    minH = np.min((Hx,Hy))
+    if minH != 0:
+        return (Hx + Hy - Hxy)/minH
+    else:
+        return 0
+
+
 class MRMRConfig(object):
 
-    def __init__(self, configuration_file, rewrite=False):
-        parser = RawConfigParser()
-        parser.read(configuration_file)
-        dist_filename = parser.get('files', 'distances-filename')
-        entropy_filename = parser.get('files', 'entropy-filename')
-        self.mRMR_filename = parser.get('files', 'mRMR-filename')
-        self.num_bins = parser.getint('parameters', 'num-bins')
-        self.bin_width = parser.getfloat('parameters', 'bin-width')
-        self.aa = parser.getboolean('parameters', 'aa')
-        self.chains = parser.getint('parameters', 'chains')
-        self.dist_range = [float(i) for i in parser.get('parameters', 'distance-range').split()]
-        self.weights = [float(i) for i in parser.get('parameters', 'weights').split()]
-        self.resi_select = parser.get('parameters', 'excluded-residues').split()
+    def __init__(self, configuration_file, rewrite=False, pre_binned=True):
+        if isinstance(configuration_file , str) :
+            parser = RawConfigParser()
+            parser.read(configuration_file)
+            dist_filename = parser.get('files', 'distances-filename')
+            entropy_filename = parser.get('files', 'entropy-filename')
+            self.mRMR_filename = parser.get('files', 'mRMR-filename')
+            self.num_bins = parser.getint('parameters', 'num-bins')
+            self.bin_width = parser.getfloat('parameters', 'bin-width')
+            self.aa = parser.getboolean('parameters', 'aa')
+            self.chains = parser.getint('parameters', 'chains')
+            self.dist_range = [float(i) for i in parser.get('parameters', 'distance-range').split()]
+            self.weights = [float(i) for i in parser.get('parameters', 'weights').split()]
+            self.resi_select = parser.get('parameters', 'excluded-residues').split()
+            self.category_vect = None
+        elif isinstance(configuration_file , dict):
+            self.num_bins = configuration_file['num-bins']
+            self.mRMR_filename = configuration_file['mRMR-filename']
+            self.bin_width = configuration_file['bin-width']
+            self.aa = configuration_file['aa']
+            self.chains = configuration_file['chains']
+            self.dist_range = configuration_file['distance-range']
+            self.weights = configuration_file['weights']
+            self.resi_select = configuration_file['excluded-residues']
+            self.dists = configuration_file['distances']
+            if 'categories' in configuration_file.keys(): #Allows for a all-to-categorical vs all-to-all MI calculation
+                self.category_vect = configuration_file['categories']
+            else:
+                self.category_vect = None
+            dist_filename = None
+        else:
+            raise ValueError('ERROR: Configuration needs to be an accepted format')
+            exit()
+        self.pre_binned = pre_binned
+
         if not self.resi_select:
             self.resi_select = None
-
-        print "Loading distance file %s" % dist_filename
-        init = time.time()
-        self.dists = cPickle.load(open(dist_filename))
-        print "Loaded %s in %f seconds" % (dist_filename, time.time() - init)
-        # If no entropy has been provided, entropy must be calculated for permitted residues.
-        print colors.HEADER + "\tENTROPY CALCULATION" + colors.ENDC
-        if os.path.exists(entropy_filename) and not rewrite:
-            warn_file_exists(entropy_filename)
-            self.entropy = cPickle.load(open(entropy_filename))
+        if dist_filename is not None:
+            print "Loading distance file %s" % dist_filename
+            init = time.time()
+            self.dists = cPickle.load(open(dist_filename))
+            print "Loaded %s in %f seconds" % (dist_filename, time.time() - init)
         else:
-            print "No entropy file was found or you have chosen to rewrite. Calculating entropies..."
-            self.entropy = h_fast(self.dists)
-            print "Dumping entopies to", entropy_filename
-            cPickle.dump(self.entropy, open(entropy_filename, 'w'))
+            print "Distances provided through dictionary"
+        # If no entropy has been provided, entropy must be calculated for permitted residues.
+        if not self.pre_binned:
+            print "Distances will be binned at %f increments" % (self.bin_width)
+            binned_distance_vector = []
+            for i in range(self.dists.shape[1]):
+                binned_distance_vector.append(digitize_vector(self.dists[:,i], self.bin_width))
+            self.dists = np.vstack(binned_distance_vector).T
+        if self.category_vect is None:
+            print colors.HEADER + "\tENTROPY CALCULATION" + colors.ENDC
+            if os.path.exists(entropy_filename) and not rewrite:
+                warn_file_exists(entropy_filename)
+                self.entropy = cPickle.load(open(entropy_filename))
+            else:
+                print "No entropy file was found or you have chosen to rewrite. Calculating entropies..."
+                self.entropy = h_fast(self.dists)
+                print "Dumping entopies to", entropy_filename
+                cPickle.dump(self.entropy, open(entropy_filename, 'w'))
+        else:
+            print colors.HEADER + "\tINITAL MI CALCULATION" + colors.ENDC
+            self.entropy = mi_all_to_one(self.dists, self.category_vect)
+
+
+
 
     def _get_permitted_pairs(self, resi_tpr=None):
         """
@@ -159,7 +276,7 @@ class MRMRConfig(object):
 
         return permitted_pairs
 
-    def mRMR(self, iters, store_in_memory=True, resi_tpr=None):
+    def mRMR(self, iters, store_in_memory=True, resi_tpr=None, permitted_pairs=None):
 
         """
         This method is an implementation of the mRMR algorithm described in http://dx.doi.org/10.1142/S0219720005001004
@@ -185,7 +302,10 @@ class MRMRConfig(object):
         _, n_pairs = self.dists.shape  # Get the number of pairs in your matrix
         print "The number of pairs is", n_pairs
 
-        permitted_resis = self._get_permitted_pairs(resi_tpr=resi_tpr)
+        if permitted_pairs is None:
+            permitted_resis = self._get_permitted_pairs(resi_tpr=resi_tpr)
+        else:
+            permitted_resis = permitted_pairs
 
         print "Saving permitted pairs to permitted_pairs.txt in this directory..."
         np.savetxt('permitted_pairs.txt', permitted_resis)
@@ -197,7 +317,8 @@ class MRMRConfig(object):
         omega = [i for i in permitted_resis]  # At first, all permitted pairs are present in omega
         s = []  # s starts as an empty set
         if store_in_memory:
-            mi_mat = np.zeros(shape=(n_pairs, n_pairs))  # To-do: make mi_mat only as big as num of permitted resis
+            mi_mat_norm = np.zeros(shape=(n_pairs, n_pairs))  # To-do: make mi_mat only as big as num of permitted resis
+            mi_mat = np.zeros(shape=(n_pairs, n_pairs))
 
         print colors.HEADER + "\n\tBEGINNING mRMR CALCULATION" + colors.ENDC
         mRMR_file = open(self.mRMR_filename, "w")
@@ -219,6 +340,7 @@ class MRMRConfig(object):
                 # will evaluate the mutual information between each of these
                 # pairs and a test pair. The test pair is test_idx
 
+
                 mRMR_scores = []
 
                 for test_idx in omega:  # Loop through test pairs
@@ -235,15 +357,28 @@ class MRMRConfig(object):
                         else:
                             pair_pair_mi += mi_fast(self.dists[:, test_idx], self.dists[:, high_idx])
 
-                    mRMR_scores.append(self.weights[0]*(self.entropy[test_idx] - pair_pair_mi/m) +
-                                       self.weights[1]*self.entropy[test_idx]/pair_pair_mi/m)
-                omega_idx = np.argmax(mRMR_scores)  # Find the test pair with the highest mRMR value
+                    mRMR_scores.append(self.weights[0] * (self.entropy[test_idx] - pair_pair_mi / m))
+                omega_idx = np.nanargmax(mRMR_scores)  # Find the test pair with the highest mRMR value
+                print 'shape: ', np.array(mRMR_scores).shape
+                if m == 1:
+			mRMR_stack = [mRMR_scores]
+			mRMR_stack_norm = [omega[:]]
+		else:
+			mRMR_stack.append(mRMR_scores)
+			mRMR_stack_norm.append(omega[:])
+		sa = np.sort(np.concatenate(mRMR_scores))[::-1]
+                print 'value: ', mRMR_scores[omega_idx]
+                print sa
+                if np.where(np.isnan(sa))[0].shape[0] > 0:
+                    print sa[np.max(np.where(np.isnan(sa))) + 1] - sa[np.max(np.where(np.isnan(sa))) + 2]
+                else:
+                    print sa[0] - sa[1]
                 s.append(omega.pop(omega_idx))  # Pop that test pair from omega, place in s
             mRMR_file.write("%i\n" % s[m])
             end_time = time.time()
             print "Time elapsed for m =", m, "calculation:", end_time-start_time
         mRMR_file.close()
-        return np.array(s)
+        return np.array(s), mRMR_stack, mRMR_stack_norm
 
 
 
