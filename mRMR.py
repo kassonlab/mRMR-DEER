@@ -63,6 +63,14 @@ def mi_fast(x, y):
     return Hx + Hy - Hxy
 
 
+def read_csv(filename):
+    mydata = []
+    with open(filename) as infile:
+        for line in infile:
+            mydata.append([int(i) for i in line.split(',')])
+    return np.array(mydata, dtype=np.int16)
+
+
 class MRMRConfig(object):
 
     def __init__(self, configuration_file, rewrite=False):
@@ -83,7 +91,10 @@ class MRMRConfig(object):
 
         print "Loading distance file %s" % dist_filename
         init = time.time()
-        self.dists = cPickle.load(open(dist_filename))
+        if dist_filename[-2:] == ".p":
+            self.dists = cPickle.load(open(dist_filename))
+        else:
+            self.dists = read_csv(dist_filename)
         print "Loaded %s in %f seconds" % (dist_filename, time.time() - init)
         # If no entropy has been provided, entropy must be calculated for permitted residues.
         print colors.HEADER + "\tENTROPY CALCULATION" + colors.ENDC
